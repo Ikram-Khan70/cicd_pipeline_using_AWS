@@ -97,6 +97,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "./site/*"
           target: "/tmp/site"
+          port: 22  
 
       - name: Move to /var/www/html and restart httpd
         uses: appleboy/ssh-action@v1.0.3
