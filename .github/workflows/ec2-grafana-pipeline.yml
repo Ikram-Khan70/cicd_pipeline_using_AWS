@@ -5,10 +5,10 @@ on:
 
 env:
   REGION: us-east-1
-  AMI_ID: ami-051f8a213df8bc089  # Amazon Linux 2 in us-east-1
+  AMI_ID: ami-051f8a213df8bc089  # Amazon Linux 2 AMI in us-east-1
   INSTANCE_TYPE: t2.micro
   SECURITY_GROUP: web-sg
-  KEY_NAME: sdgra               # Replace with your key name
+  KEY_NAME: sdgra               # Replace with your key pair name
 
 jobs:
   job1_create_ec2:
@@ -33,7 +33,7 @@ jobs:
           yum install -y httpd
           systemctl start httpd
           systemctl enable httpd
-          echo "<h1>EC2 Web Server with HTTPD</h1>" > /var/www/html/index.html
+          echo "<h1>EC2 Web Server with HTTPD (bootstrapped)</h1>" > /var/www/html/index.html
           EOF
 
           cat <<EOF > create_ec2.sh
@@ -78,10 +78,15 @@ jobs:
         shell: bash
 
   job2_push_files:
-    name: Push files to EC2 and restart httpd
+    name: Upload HTML to EC2 and restart Apache
     needs: job1_create_ec2
     runs-on: ubuntu-latest
     steps:
+      - name: Create index.html file
+        run: |
+          mkdir -p output
+          echo "<h1>Hello from GitHub Actions 🚀</h1>" > output/index.html
+
       - name: Wait for EC2 SSH to be ready
         run: |
           for i in {1..20}; do
@@ -89,15 +94,15 @@ jobs:
             echo "Waiting for SSH..."; sleep 10;
           done
 
-      - name: Copy files to EC2
+      - name: Copy index.html to EC2
         uses: appleboy/scp-action@v0.1.3
         with:
           host: ${{ env.EC2_PUBLIC_IP }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "./site/*"
-          target: "/tmp/site"
-          port: 22  
+          source: "output/index.html"
+          target: "/tmp/"
+          port: 22
 
       - name: Move to /var/www/html and restart httpd
         uses: appleboy/ssh-action@v1.0.3
@@ -105,10 +110,11 @@ jobs:
           host: ${{ env.EC2_PUBLIC_IP }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
           script: |
-            sudo cp -r /tmp/site/* /var/www/html/
+            sudo mv /tmp/index.html /var/www/html/index.html
             sudo systemctl restart httpd
-            echo "Site is running at: http://$EC2_PUBLIC_IP"
+            echo "✅ Site is now live at: http://$EC2_PUBLIC_IP"
 
   job3_grafana_import:
     name: Import Dashboard to Grafana
@@ -117,7 +123,7 @@ jobs:
     steps:
       - name: Import Grafana Dashboard
         run: |
-          DASHBOARD_UID="3111" # Replace with your desired UID
+          DASHBOARD_UID="3111" # Replace with your desired UID or dashboard template ID
           GRAFANA_URL="https://mrmik7760.grafana.net" # Replace with your Grafana URL
 
           DASHBOARD_JSON=$(curl -s "$GRAFANA_URL/api/dashboards/uid/$DASHBOARD_UID" \
